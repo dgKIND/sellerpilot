@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SellerPilot — Калькулятор прибыли</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { background: #1e293b; padding: 40px; border-radius: 16px; width: 100%; max-width: 500px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+        h1 { font-size: 24px; margin-bottom: 8px; }
+        .subtitle { color: #94a3b8; margin-bottom: 24px; font-size: 14px; }
+        label { display: block; margin-top: 16px; font-size: 14px; color: #94a3b8; }
+        input, select { width: 100%; padding: 12px; margin-top: 6px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: 16px; }
+        button { width: 100%; padding: 14px; margin-top: 24px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
+        button:hover { background: #2563eb; }
+        .result { margin-top: 24px; padding: 20px; background: #0f172a; border-radius: 12px; display: none; }
+        .result.show { display: block; }
+        .profit { font-size: 32px; font-weight: 700; }
+        .profit.positive { color: #4ade80; }
+        .profit.negative { color: #f87171; }
+        .breakdown { margin-top: 16px; font-size: 14px; color: #94a3b8; }
+        .breakdown div { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #1e293b; }
+        .error { color: #f87171; margin-top: 12px; display: none; }
+        .error.show { display: block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 SellerPilot</h1>
+        <p class="subtitle">Калькулятор чистой прибыли для селлеров</p>
+        <label>Маркетплейс</label>
+        <select id="marketplace"><option value="WB">Wildberries</option><option value="OZON">Ozon</option></select>
+        <label>Артикул товара</label>
+        <input type="text" id="sku" placeholder="123456789">
+        <label>Цена закупки (₽)</label>
+        <input type="number" id="purchase_price" placeholder="150">
+        <label>Цена продажи (₽)</label>
+        <input type="number" id="selling_price" placeholder="900">
+        <label>Категория</label>
+        <select id="category"><option value="Одежда">Одежда</option><option value="Товары для дома" selected>Товары для дома</option><option value="Электроника">Электроника</option><option value="Детские товары">Детские товары</option></select>
+        <label>Скидка за ваш счёт (%)</label>
+        <input type="number" id="discount" placeholder="18" value="18">
+        <label>Процент выкупа (%)</label>
+        <input type="number" id="buyout_percent" placeholder="75" value="75">
+        <label>Налог (%)</label>
+        <input type="number" id="tax_rate" placeholder="6" value="6">
+        <button onclick="calculate()">Рассчитать прибыль</button>
+        <div id="error" class="error"></div>
+        <div id="result" class="result">
+            <div class="profit" id="verdict"></div>
+            <div class="profit" id="net_profit"></div>
+            <div class="breakdown" id="breakdown"></div>
+        </div>
+    </div>
+    <script>
+        async function calculate() {
+            const errorEl = document.getElementById('error');
+            const resultEl = document.getElementById('result');
+            errorEl.classList.remove('show');
+            resultEl.classList.remove('show');
+            const data = {
+                marketplace: document.getElementById('marketplace').value,
+                sku: document.getElementById('sku').value,
+                purchase_price: parseFloat(document.getElementById('purchase_price').value),
+                selling_price: parseFloat(document.getElementById('selling_price').value),
+                category: document.getElementById('category').value,
+                discount: parseFloat(document.getElementById('discount').value) || 0,
+                buyout_percent: parseFloat(document.getElementById('buyout_percent').value) || 100,
+                tax_rate: parseFloat(document.getElementById('tax_rate').value) || 6
+            };
+            try {
+                const response = await fetch('http://127.0.0.1:8001/calculate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (!response.ok) { const err = await response.json(); throw new Error(err.detail || 'Ошибка расчёта'); }
+                const result = await response.json();
+                document.getElementById('verdict').textContent = result.verdict;
+                document.getElementById('net_profit').textContent = 'Чистая прибыль: ' + result.net_profit.toLocaleString() + ' ₽';
+                document.getElementById('verdict').className = 'profit ' + (result.net_profit >= 0 ? 'positive' : 'negative');
+                document.getElementById('breakdown').innerHTML = `
+                    <div><span>Выручка (после скидки и выкупа)</span><span>${result.revenue_after_discount.toLocaleString()} ₽</span></div>
+                    <div><span>Комиссия маркетплейса</span><span>-${result.commission_amount.toLocaleString()} ₽</span></div>
+                    <div><span>Логистика</span><span>-${result.logistics_amount.toLocaleString()} ₽</span></div>
+                    <div><span>Хранение (60 дн.)</span><span>-${result.storage_amount.toLocaleString()} ₽</span></div>
+                    <div><span>Налог</span><span>-${result.tax_amount.toLocaleString()} ₽</span></div>
+                    <div style="font-weight:700; color:#e2e8f0;"><span>Всего расходов</span><span>-${result.total_costs.toLocaleString()} ₽</span></div>
+                    <div style="font-weight:700;"><span>ROI</span><span>${result.roi}%</span></div>
+                `;
+                resultEl.classList.add('show');
+            } catch (err) {
+                errorEl.textContent = 'Ошибка: ' + err.message;
+                errorEl.classList.add('show');
+            }
+        }
+    </script>
+</body>
+</html>
